@@ -1,0 +1,10 @@
+[package]
+name = "gds2_parser"
+version = "0.1.0"
+edition = "2018"
+keyword = ["parser","science"]
+
+[dependencies]
+nom = "6.0"
+byteorder = "*"
+thiserror = "*"
