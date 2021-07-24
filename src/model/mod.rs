@@ -28,6 +28,7 @@ pub enum GDSIIVariant {
     TuctosinEnd,
     ModuleEnd,
     FileEnd,
+    Eof, // may include EOF tag in the file
 }
 
 /// File header variant in GDSII

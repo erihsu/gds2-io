@@ -1,210 +1,312 @@
 use super::basic::*;
-use super::ParseGDIIRes;
+use super::{ParseGDIIRes, ParseGDSIIError};
 use crate::model::*;
-use byteorder::{ByteOrder, LittleEndian};
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use nom::bytes::streaming::take;
+use std::str;
 
-pub(super) fn variant_parser(s: &str) -> ParseGDIIRes<&str, GDSIIVariant> {
-    let (s, d_size) = take_size(s)?;
+pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
+    let (s, size) = take_size(s)?;
     let (s, d_type) = take_type(s)?;
+    // data size
+
+    // FIXME there is bug when size == 0
+    if size < 4usize {
+        return Ok((s, GDSIIVariant::Eof));
+    }
+    let d_size = size - 4usize;
+
     let (s, data) = take(d_size)(s)?;
-    let module_header = match d_type.as_bytes() {
+    // println!("{}", d_size);
+    let module_header = match d_type {
         // File Header
-        b"0x0002" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let header = i16::from_str_radix(data, 16).unwrap();
+        [0x00, 0x02] => {
+            assert!(d_size == 2usize, "mismatch header length in file header");
+            let header = BigEndian::read_i16(&data);
             GDSIIVariant::FileHeader(FileHeader::Header(header))
         }
-        b"0x0102" => {
-            assert!(d_size == 24, "data type mismatch in GDSII header");
+        [0x01, 0x02] => {
+            assert!(d_size == 24usize, "mismatch data bgn length in file header");
             let mut bgn = [0i16; 12];
-            let byted = data.as_bytes();
+            // let byted = data.as_bytes();
             for i in 0..12 {
-                bgn[i] = LittleEndian::read_i16(&byted)
+                bgn[i] = BigEndian::read_i16(&data)
             }
             GDSIIVariant::FileHeader(FileHeader::BgnLib(bgn))
         }
-        b"0x0206" => GDSIIVariant::FileHeader(FileHeader::LibName(data.to_string())),
-        b"0x1F06" => {
-            assert!(d_size == 90, "data type mismatch in GDSII header");
-            GDSIIVariant::FileHeader(FileHeader::RefLibs(data.to_string()))
+        [0x02, 0x06] => {
+            let str_data = match str::from_utf8(data) {
+                Ok(q) => q,
+                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
+            };
+            GDSIIVariant::FileHeader(FileHeader::LibName(str_data.to_string()))
         }
-        b"0x2006" => {
-            assert!(d_size == 176, "data type mismatch in GDSII header");
-            GDSIIVariant::FileHeader(FileHeader::Fonts(data.to_string()))
+        [0x1F, 0x06] => {
+            assert!(d_size == 90usize, "mismatch reflib length in file header");
+            let str_data = match str::from_utf8(data) {
+                Ok(q) => q,
+                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
+            };
+            GDSIIVariant::FileHeader(FileHeader::RefLibs(str_data.to_string()))
         }
-        b"0x2306" => {
-            assert!(d_size == 44, "data type mismatch in GDSII header");
-            GDSIIVariant::FileHeader(FileHeader::AttrTable(data.to_string()))
+        [0x20, 0x06] => {
+            assert!(d_size == 176usize, "mismatch font length in file header");
+            let str_data = match str::from_utf8(data) {
+                Ok(q) => q,
+                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
+            };
+            GDSIIVariant::FileHeader(FileHeader::Fonts(str_data.to_string()))
         }
-        b"0x2202" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            GDSIIVariant::FileHeader(FileHeader::Generations(
-                i16::from_str_radix(data, 16).unwrap(),
-            ))
+        [0x23, 0x06] => {
+            assert!(
+                d_size == 44usize,
+                "mismatch attr_table length in file header"
+            );
+            let str_data = match str::from_utf8(data) {
+                Ok(q) => q,
+                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
+            };
+            GDSIIVariant::FileHeader(FileHeader::AttrTable(str_data.to_string()))
         }
-        b"0x3602" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            GDSIIVariant::FileHeader(FileHeader::Format(i16::from_str_radix(data, 16).unwrap()))
+        [0x22, 0x02] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch generation length in file header"
+            );
+            let generation = BigEndian::read_i16(&data);
+            GDSIIVariant::FileHeader(FileHeader::Generations(generation))
         }
-        b"0x3706" => GDSIIVariant::FileHeader(FileHeader::Mask(data.to_string())),
-        b"0x3800" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x36, 0x02] => {
+            assert!(d_size == 2usize, "mismatch format length in file header");
+            let format = BigEndian::read_i16(&data);
+            GDSIIVariant::FileHeader(FileHeader::Format(format))
+        }
+        [0x37, 0x06] => {
+            let str_data = match str::from_utf8(data) {
+                Ok(q) => q,
+                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
+            };
+            GDSIIVariant::FileHeader(FileHeader::Mask(str_data.to_string()))
+        }
+        [0x38, 0x00] => {
+            assert!(d_size == 0usize, "mismatch mask length in file header");
             GDSIIVariant::FileHeader(FileHeader::EndMask)
         }
-        b"0x0305" => {
-            assert!(d_size == 16, "data type mismatch in GDSII header");
+        [0x03, 0x05] => {
+            assert!(d_size == 16usize, "mismatch units length in file header");
             let mut units = [0.0f64; 2];
-            let byted = data.as_bytes();
+            // let byted = data.as_bytes();
             for i in 0..2 {
-                units[i] = LittleEndian::read_f64(&byted)
+                units[i] = BigEndian::read_f64(&data)
             }
             GDSIIVariant::FileHeader(FileHeader::Units(units))
         }
         // File End
-        b"0x0400" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x04, 0x00] => {
+            assert!(d_size == 0usize, "there should be no data in file tile");
             GDSIIVariant::FileEnd
         }
         // Module Header
-        b"0x0502" => {
-            assert!(d_size == 24, "data type mismatch in GDSII header");
+        [0x05, 0x02] => {
+            assert!(
+                d_size == 24usize,
+                "mismatch bgn_str length in module header"
+            );
             let mut bgn = [0i16; 12];
-            let byted = data.as_bytes();
             for i in 0..12 {
-                bgn[i] = LittleEndian::read_i16(&byted)
+                bgn[i] = BigEndian::read_i16(&data)
             }
             GDSIIVariant::ModuleHeader(ModuleHeader::BgnStr(bgn))
         }
-        b"0x0606" => {
-            assert!(d_size == 176, "data type mismatch in GDSII header");
-            GDSIIVariant::ModuleHeader(ModuleHeader::StrName(data.to_string()))
+        [0x06, 0x06] => {
+            let str_data = match str::from_utf8(data) {
+                Ok(q) => q,
+                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
+            };
+            GDSIIVariant::ModuleHeader(ModuleHeader::StrName(str_data.to_string()))
         }
         // Module End
-        b"0x0700" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x07, 0x00] => {
+            assert!(d_size == 0usize, "there should be no data in module tile");
             GDSIIVariant::ModuleEnd
         }
         // Tuctosin header
-        b"0x0800" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x08, 0x00] => {
+            assert!(
+                d_size == 0usize,
+                "there should be no data in tuctosin header"
+            );
             GDSIIVariant::TuctosinHeader(TuctosinHeader::Boundary)
         }
-        b"0x0900" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x09, 0x00] => {
+            assert!(
+                d_size == 0usize,
+                "there should be no data in tuctosin header"
+            );
             GDSIIVariant::TuctosinHeader(TuctosinHeader::Path)
         }
-        b"0x0A00" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x0A, 0x00] => {
+            assert!(
+                d_size == 0usize,
+                "there should be no data in tuctosin header"
+            );
             GDSIIVariant::TuctosinHeader(TuctosinHeader::Sref)
         }
-        b"0x0B00" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x0B, 0x00] => {
+            assert!(
+                d_size == 0usize,
+                "there should be no data in tuctosin header"
+            );
             GDSIIVariant::TuctosinHeader(TuctosinHeader::Aref)
         }
-        b"0x0C00" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x0C, 0x00] => {
+            assert!(
+                d_size == 0usize,
+                "there should be no data in tuctosin header"
+            );
             GDSIIVariant::TuctosinHeader(TuctosinHeader::Text)
         }
-        b"0x1500" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x15, 0x00] => {
+            assert!(
+                d_size == 0usize,
+                "there should be no data in tuctosin header"
+            );
             GDSIIVariant::TuctosinHeader(TuctosinHeader::Node)
         }
-        b"0x2D00" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x2D, 0x00] => {
+            assert!(
+                d_size == 0usize,
+                "there should be no data in tuctosin header"
+            );
             GDSIIVariant::TuctosinHeader(TuctosinHeader::Box)
         }
         // Tuctosin End
-        b"0x1100" => {
-            assert!(d_size == 0, "data type mismatch in GDSII header");
+        [0x11, 0x00] => {
+            assert!(d_size == 0usize, "there should be no data in tuctosin tile");
             GDSIIVariant::TuctosinEnd
         }
         // Tuctosin Body
-        b"0x26_01" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let elfflags = i16::from_str_radix(data, 16).unwrap();
+        [0x26, 0x01] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch elf_flags length in tuctosin body"
+            );
+            let elfflags = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::ElfFlags(elfflags))
         }
-        b"0x2F_03" => {
-            assert!(d_size == 4, "data type mismatch in GDSII header");
-            let byted = data.as_bytes();
-            let plex = LittleEndian::read_i32(&byted);
+        [0x2F, 0x03] => {
+            assert!(d_size == 4usize, "mismatch plex length in tuctosin body");
+            // let byted = data.as_bytes();
+            let plex = BigEndian::read_i32(&data);
             GDSIIVariant::Tuctosin(Tuctosin::Plex(plex))
         }
-        b"0x0D_O2" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let layer = i16::from_str_radix(data, 16).unwrap();
+        [0x0D, 0x02] => {
+            assert!(d_size == 2usize, "mismatch layer length in tuctosin body");
+            let layer = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::Layer(layer))
         }
-        b"0xOE_O2" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let data_type = i16::from_str_radix(data, 16).unwrap();
+        [0x0E, 0x02] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch data_type length in tuctosin body"
+            );
+            let data_type = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::DataType(data_type))
         }
-        b"0x10_03" => {
-            assert!(d_size % 8 == 0, "data type mismatch in GDSII header");
+        [0x10, 0x03] => {
+            assert!(d_size % 8 == 0, "mismatch x_y length in tuctosin body");
             let mut shapes = vec![];
             let shape_len = d_size / 8;
-            let byted = data.as_bytes();
+            // let byted = data.as_bytes();
             for _ in 0..shape_len {
-                let x = LittleEndian::read_i32(&byted);
-                let y = LittleEndian::read_i32(&byted);
+                let x = BigEndian::read_i32(&data);
+                let y = BigEndian::read_i32(&data);
                 shapes.push((x, y));
             }
             GDSIIVariant::Tuctosin(Tuctosin::Xy(shapes))
         }
-        b"0x21_02" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let path_type = i16::from_str_radix(data, 16).unwrap();
+        [0x21, 0x02] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch path_type length in tuctosin body"
+            );
+            let path_type = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::PathType(path_type))
         }
-        b"0x0F_03" => {
-            assert!(d_size == 4, "data type mismatch in GDSII header");
-            let width = i32::from_str_radix(data, 16).unwrap();
+        [0x0F, 0x03] => {
+            assert!(d_size == 4usize, "mismatch width length in tuctosin body");
+            let width = BigEndian::read_i32(&data);
             GDSIIVariant::Tuctosin(Tuctosin::Width(width))
         }
-        b"0x12_06" => GDSIIVariant::Tuctosin(Tuctosin::Sname(data.to_string())),
-        b"0x1A_01" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let strans = i16::from_str_radix(data, 16).unwrap();
+        [0x12, 0x06] => {
+            let str_data = match str::from_utf8(data) {
+                Ok(q) => q,
+                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
+            };
+            GDSIIVariant::Tuctosin(Tuctosin::Sname(str_data.to_string()))
+        }
+        [0x1A, 0x01] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch path_type length in tuctosin body"
+            );
+            let strans = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::PathType(strans))
         }
-        b"0x1B_05" => {
-            assert!(d_size == 8, "data type mismatch in GDSII header");
-            let mag = i64::from_str_radix(data, 16).unwrap();
+        [0x1B, 0x05] => {
+            assert!(d_size == 8usize, "mismatch mag length in tuctosin body");
+            let mag = BigEndian::read_i64(&data);
             GDSIIVariant::Tuctosin(Tuctosin::Mag(mag))
         }
-        b"0x1C_05" => {
-            assert!(d_size == 8, "data type mismatch in GDSII header");
-            let angle = i64::from_str_radix(data, 16).unwrap();
+        [0x1C, 0x05] => {
+            assert!(d_size == 8usize, "mismatch angle length in tuctosin body");
+            let angle = BigEndian::read_i64(&data);
             GDSIIVariant::Tuctosin(Tuctosin::Angle(angle))
         }
-        b"0x13_02" => {
-            assert!(d_size == 4, "data type mismatch in GDSII header");
-            let byted = data.as_bytes();
-            let col = LittleEndian::read_i16(&byted);
-            let row = LittleEndian::read_i16(&byted);
+        [0x13, 0x02] => {
+            assert!(d_size == 4usize, "mismatch col_row length in tuctosin body");
+            // let byted = data.as_bytes();
+            let col = BigEndian::read_i16(&data);
+            let row = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::ColRow((col, row)))
         }
-        b"0x16_02" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let text_type = i16::from_str_radix(data, 16).unwrap();
+        [0x16, 0x02] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch text_type length in tuctosin body"
+            );
+            let text_type = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::TextType(text_type))
         }
-        b"0x17_01" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let pers = i16::from_str_radix(data, 16).unwrap();
+        [0x17, 0x01] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch persentation length in tuctosin body"
+            );
+            let pers = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::Persentation(pers))
         }
-        b"0x19_06" => GDSIIVariant::Tuctosin(Tuctosin::AsciiString(data.to_string())),
-        b"0x2A_02" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let node_type = i16::from_str_radix(data, 16).unwrap();
+        [0x19, 0x06] => {
+            let str_data = match str::from_utf8(data) {
+                Ok(q) => q,
+                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
+            };
+            GDSIIVariant::Tuctosin(Tuctosin::AsciiString(str_data.to_string()))
+        }
+        [0x2A, 0x02] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch node_type length in tuctosin body"
+            );
+            let node_type = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::NodeType(node_type))
         }
-        b"0x2E_02" => {
-            assert!(d_size == 2, "data type mismatch in GDSII header");
-            let box_type = i16::from_str_radix(data, 16).unwrap();
+        [0x2E, 0x02] => {
+            assert!(
+                d_size == 2usize,
+                "mismatch box_type length in tuctosin body"
+            );
+            let box_type = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::BoxType(box_type))
         }
         _ => unreachable!(),
