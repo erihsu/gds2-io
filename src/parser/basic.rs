@@ -1,7 +1,6 @@
 use super::ParseGDIIRes;
-use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use byteorder::{BigEndian, ByteOrder};
 use nom::bytes::streaming::{tag, take};
-use nom::sequence::tuple;
 
 // return valid data size(exclude two byte "size" and two byte "type")
 pub(super) fn take_size(s: &[u8]) -> ParseGDIIRes<&[u8], usize> {
@@ -16,5 +15,5 @@ pub(super) fn take_type(s: &[u8]) -> ParseGDIIRes<&[u8], [u8; 2]> {
 }
 
 pub(super) fn end_tag(s: &[u8]) -> ParseGDIIRes<&[u8], &[u8]> {
-    tag([0x00, 0x00])(s)
+    tag([0x00, 0x04, 0x04, 0x00])(s)
 }

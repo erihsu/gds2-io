@@ -32,6 +32,7 @@ pub enum GDSIIVariant {
 }
 
 /// File header variant in GDSII
+#[derive(Debug)]
 pub enum FileHeader {
     Header(i16),       // 0x00_02
     BgnLib([i16; 12]), // 0x01_02
@@ -89,6 +90,7 @@ impl Default for TuctosinHeader {
     }
 }
 
+#[derive(Debug)]
 pub enum Tuctosin {
     ElfFlags(i16),       // 0x26_01
     Plex(i32),           // 0x2F_03

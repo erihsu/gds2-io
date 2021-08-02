@@ -1,10 +1,10 @@
 use super::basic::*;
-use super::{ParseGDIIRes, ParseGDSIIError};
+use super::ParseGDIIRes;
 use crate::model::*;
-use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use nom::bytes::streaming::take;
-use std::str;
-
+use std::ascii;
+use std::io::Cursor;
 pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
     let (s, size) = take_size(s)?;
     let (s, d_type) = take_type(s)?;
@@ -28,45 +28,44 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
         [0x01, 0x02] => {
             assert!(d_size == 24usize, "mismatch data bgn length in file header");
             let mut bgn = [0i16; 12];
-            // let byted = data.as_bytes();
-            for i in 0..12 {
-                bgn[i] = BigEndian::read_i16(&data)
-            }
+            BigEndian::read_i16_into(&data, &mut bgn);
             GDSIIVariant::FileHeader(FileHeader::BgnLib(bgn))
         }
         [0x02, 0x06] => {
-            let str_data = match str::from_utf8(data) {
-                Ok(q) => q,
-                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
-            };
-            GDSIIVariant::FileHeader(FileHeader::LibName(str_data.to_string()))
+            let escaped_ascii = data
+                .iter()
+                .map(|v| ascii::escape_default(*v).next().unwrap())
+                .collect();
+            GDSIIVariant::FileHeader(FileHeader::LibName(
+                String::from_utf8(escaped_ascii).unwrap(),
+            ))
         }
         [0x1F, 0x06] => {
             assert!(d_size == 90usize, "mismatch reflib length in file header");
-            let str_data = match str::from_utf8(data) {
-                Ok(q) => q,
-                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
-            };
-            GDSIIVariant::FileHeader(FileHeader::RefLibs(str_data.to_string()))
+            let escaped_ascii = data
+                .iter()
+                .map(|v| ascii::escape_default(*v).next().unwrap())
+                .collect();
+            GDSIIVariant::FileHeader(FileHeader::RefLibs(
+                String::from_utf8(escaped_ascii).unwrap(),
+            ))
         }
         [0x20, 0x06] => {
             assert!(d_size == 176usize, "mismatch font length in file header");
-            let str_data = match str::from_utf8(data) {
-                Ok(q) => q,
-                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
-            };
-            GDSIIVariant::FileHeader(FileHeader::Fonts(str_data.to_string()))
+            let escaped_ascii = data
+                .iter()
+                .map(|v| ascii::escape_default(*v).next().unwrap())
+                .collect();
+            GDSIIVariant::FileHeader(FileHeader::Fonts(String::from_utf8(escaped_ascii).unwrap()))
         }
         [0x23, 0x06] => {
             assert!(
                 d_size == 44usize,
                 "mismatch attr_table length in file header"
             );
-            let str_data = match str::from_utf8(data) {
-                Ok(q) => q,
-                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
-            };
-            GDSIIVariant::FileHeader(FileHeader::AttrTable(str_data.to_string()))
+            GDSIIVariant::FileHeader(FileHeader::AttrTable(
+                String::from_utf8_lossy(data).to_string(),
+            ))
         }
         [0x22, 0x02] => {
             assert!(
@@ -82,11 +81,7 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
             GDSIIVariant::FileHeader(FileHeader::Format(format))
         }
         [0x37, 0x06] => {
-            let str_data = match str::from_utf8(data) {
-                Ok(q) => q,
-                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
-            };
-            GDSIIVariant::FileHeader(FileHeader::Mask(str_data.to_string()))
+            GDSIIVariant::FileHeader(FileHeader::Mask(String::from_utf8_lossy(data).to_string()))
         }
         [0x38, 0x00] => {
             assert!(d_size == 0usize, "mismatch mask length in file header");
@@ -95,10 +90,7 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
         [0x03, 0x05] => {
             assert!(d_size == 16usize, "mismatch units length in file header");
             let mut units = [0.0f64; 2];
-            // let byted = data.as_bytes();
-            for i in 0..2 {
-                units[i] = BigEndian::read_f64(&data)
-            }
+            BigEndian::read_f64_into(&data, &mut units);
             GDSIIVariant::FileHeader(FileHeader::Units(units))
         }
         // File End
@@ -113,17 +105,17 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
                 "mismatch bgn_str length in module header"
             );
             let mut bgn = [0i16; 12];
-            for i in 0..12 {
-                bgn[i] = BigEndian::read_i16(&data)
-            }
+            BigEndian::read_i16_into(&data, &mut bgn);
             GDSIIVariant::ModuleHeader(ModuleHeader::BgnStr(bgn))
         }
         [0x06, 0x06] => {
-            let str_data = match str::from_utf8(data) {
-                Ok(q) => q,
-                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
-            };
-            GDSIIVariant::ModuleHeader(ModuleHeader::StrName(str_data.to_string()))
+            let escaped_ascii = data
+                .iter()
+                .map(|v| ascii::escape_default(*v).next().unwrap())
+                .collect();
+            GDSIIVariant::ModuleHeader(ModuleHeader::StrName(
+                String::from_utf8(escaped_ascii).unwrap(),
+            ))
         }
         // Module End
         [0x07, 0x00] => {
@@ -213,14 +205,16 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
             let data_type = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::DataType(data_type))
         }
+        // tuctosin body
+        // TODO: seek better solution
         [0x10, 0x03] => {
             assert!(d_size % 8 == 0, "mismatch x_y length in tuctosin body");
+            let mut reader = Cursor::new(data);
             let mut shapes = vec![];
             let shape_len = d_size / 8;
-            // let byted = data.as_bytes();
             for _ in 0..shape_len {
-                let x = BigEndian::read_i32(&data);
-                let y = BigEndian::read_i32(&data);
+                let x = reader.read_i32::<BigEndian>().unwrap();
+                let y = reader.read_i32::<BigEndian>().unwrap();
                 shapes.push((x, y));
             }
             GDSIIVariant::Tuctosin(Tuctosin::Xy(shapes))
@@ -239,11 +233,7 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
             GDSIIVariant::Tuctosin(Tuctosin::Width(width))
         }
         [0x12, 0x06] => {
-            let str_data = match str::from_utf8(data) {
-                Ok(q) => q,
-                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
-            };
-            GDSIIVariant::Tuctosin(Tuctosin::Sname(str_data.to_string()))
+            GDSIIVariant::Tuctosin(Tuctosin::Sname(String::from_utf8_lossy(data).to_string()))
         }
         [0x1A, 0x01] => {
             assert!(
@@ -286,13 +276,9 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
             let pers = BigEndian::read_i16(&data);
             GDSIIVariant::Tuctosin(Tuctosin::Persentation(pers))
         }
-        [0x19, 0x06] => {
-            let str_data = match str::from_utf8(data) {
-                Ok(q) => q,
-                Err(_) => return Err(nom::Err::Error(ParseGDSIIError::Utf8Error)),
-            };
-            GDSIIVariant::Tuctosin(Tuctosin::AsciiString(str_data.to_string()))
-        }
+        [0x19, 0x06] => GDSIIVariant::Tuctosin(Tuctosin::AsciiString(
+            String::from_utf8_lossy(data).to_string(),
+        )),
         [0x2A, 0x02] => {
             assert!(
                 d_size == 2usize,
