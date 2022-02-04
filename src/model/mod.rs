@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+// assume there is single module in the gds2 file
 #[derive(Default)]
 pub struct GDSIIModel {
     pub header: HashMap<String, FileHeader>,

@@ -1,8 +1,8 @@
 [package]
-name = "gds2_parser"
-version = "0.1.0"
-edition = "2018"
-keyword = ["parser","science"]
+name = "gds2_io"
+version = "0.2.0"
+edition = "2021"
+keyword = ["parser","science","gds"]
 
 [dependencies]
 nom = "6.0"

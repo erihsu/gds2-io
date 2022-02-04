@@ -8,6 +8,7 @@ use crate::error::GDSIIErrorKind;
 mod error;
 mod model;
 mod parser;
+mod saver;
 
 /// gds2 file path
 pub fn parse_gds2<P: AsRef<std::path::Path>>(
