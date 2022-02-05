@@ -3,7 +3,7 @@ use super::ParseGDIIRes;
 use crate::model::*;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use nom::bytes::streaming::take;
-use std::ascii;
+
 use std::io::Cursor;
 pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
     let (s, size) = take_size(s)?;
@@ -32,31 +32,31 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
             GDSIIVariant::FileHeader(FileHeader::BgnLib(bgn))
         }
         [0x02, 0x06] => {
-            let escaped_ascii = data
-                .iter()
-                .map(|v| ascii::escape_default(*v).next().unwrap())
-                .collect();
+            // let escaped_ascii = data
+            //     .iter()
+            //     .map(|v| ascii::escape_default(*v).next().unwrap())
+            //     .collect();
             GDSIIVariant::FileHeader(FileHeader::LibName(
-                String::from_utf8(escaped_ascii).unwrap(),
+                String::from_utf8(data.to_vec()).unwrap(),
             ))
         }
         [0x1F, 0x06] => {
             assert!(d_size == 90usize, "mismatch reflib length in file header");
-            let escaped_ascii = data
-                .iter()
-                .map(|v| ascii::escape_default(*v).next().unwrap())
-                .collect();
+            // let escaped_ascii = data
+            //     .iter()
+            //     .map(|v| ascii::escape_default(*v).next().unwrap())
+            //     .collect();
             GDSIIVariant::FileHeader(FileHeader::RefLibs(
-                String::from_utf8(escaped_ascii).unwrap(),
+                String::from_utf8(data.to_vec()).unwrap(),
             ))
         }
         [0x20, 0x06] => {
             assert!(d_size == 176usize, "mismatch font length in file header");
-            let escaped_ascii = data
-                .iter()
-                .map(|v| ascii::escape_default(*v).next().unwrap())
-                .collect();
-            GDSIIVariant::FileHeader(FileHeader::Fonts(String::from_utf8(escaped_ascii).unwrap()))
+            // let escaped_ascii = data
+            //     .iter()
+            //     .map(|v| ascii::escape_default(*v).next().unwrap())
+            //     .collect();
+            GDSIIVariant::FileHeader(FileHeader::Fonts(String::from_utf8(data.to_vec()).unwrap()))
         }
         [0x23, 0x06] => {
             assert!(
@@ -109,12 +109,12 @@ pub(super) fn variant_parser(s: &[u8]) -> ParseGDIIRes<&[u8], GDSIIVariant> {
             GDSIIVariant::ModuleHeader(ModuleHeader::BgnStr(bgn))
         }
         [0x06, 0x06] => {
-            let escaped_ascii = data
-                .iter()
-                .map(|v| ascii::escape_default(*v).next().unwrap())
-                .collect();
+            // let escaped_ascii = data
+            //     .iter()
+            //     .map(|v| ascii::escape_default(*v).next().unwrap())
+            //     .collect();
             GDSIIVariant::ModuleHeader(ModuleHeader::StrName(
-                String::from_utf8(escaped_ascii).unwrap(),
+                String::from_utf8(data.to_vec()).unwrap(),
             ))
         }
         // Module End
