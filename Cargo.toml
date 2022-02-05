@@ -2,9 +2,9 @@
 name = "gds2_io"
 version = "0.2.0"
 edition = "2021"
-keyword = ["parser","science","gds"]
+keywords = ["parser","science","gds"]
 
 [dependencies]
-nom = "6.0"
-byteorder = "*"
-thiserror = "*"
+nom = "7.0"
+byteorder = "1.4.3"
+thiserror = "1.0"
