@@ -7,14 +7,15 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 description = "gds2 IO utils"
 repository = "https://github.com/erihsu/gds2-io"
+exclude = [
+	"testcases/*",
+	"tests/*",
+]
+
 
 [dependencies]
 nom = "7.0"
 byteorder = "1.4.3"
 thiserror = "1.0"
 
-[package]
-exclude = [
-	"testcases/*",
-	"tests/*",
-]
+
