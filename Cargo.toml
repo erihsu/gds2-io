@@ -2,7 +2,11 @@
 name = "gds2_io"
 version = "0.2.0"
 edition = "2021"
-keywords = ["parser","science","gds"]
+keywords = ["parser","science","gds","eda"]
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+description = "gds2 IO utils"
+repository = "https://github.com/erihsu/gds2-io"
 
 [dependencies]
 nom = "7.0"
